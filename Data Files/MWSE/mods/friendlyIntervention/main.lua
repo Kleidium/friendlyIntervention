@@ -525,3 +525,7 @@ event.register("modConfigReady", function()
     require("friendlyIntervention.mcm")
     config = require("friendlyIntervention.config")
 end)
+
+
+--Changes--
+--Fixed how NPC Mark locations are saved. I have to make a copy of the player's position, use pos.x, pos.y, pos.z in mod data and use cell.id instead of the non-serializable object.

@@ -34,7 +34,7 @@ local settings = createPage("Settings")
 
 
 ----Global Settings-------------------------------------------------------------------------------------------------------------------------
-local globalSettings = settings:createCategory("Global Settings")
+local globalSettings = settings:createCategory("General Settings")
 
 globalSettings:createOnOffButton {
     label = "Normal Teleportation",

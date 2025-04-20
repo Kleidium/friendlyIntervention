@@ -383,8 +383,8 @@ function port.onSelectD(i)
         end
         if i == 16 then
             local modData = func.getModData(port.teleporter)
-            local cell = modData.cell
-            destLabel.text = "Destination: " .. cell.name .. ""
+            local cell = tes3.getCell{ id = modData.cell }
+            destLabel.text = "Destination: " .. cell.displayName .. ""
         end
 
         port.destination = i
@@ -423,7 +423,7 @@ function port.castMark(e)
         if e.button == 0 then
             local modData = func.getModData(port.teleporter)
             local cell = port.teleporter.cell
-            local position = tes3.getPlayerEyePosition()
+            local position = tes3.player.position:copy()
 
             if config.magickaReq == true then
                 --Magicka Required
@@ -461,8 +461,8 @@ function port.castMark(e)
                         mgkLabel.color = { r, g, 0.25 }
                     end
                     --Set Mark Cell/Position
-                    modData.cell = cell
-                    modData.position = position
+                    modData.cell = cell.id
+                    modData.position = { position.x, position.y, position.z }
                     if config.playSound == true then
                         tes3.playSound({ sound = "mysticism cast", volume = 0.8 })
                     end
@@ -470,8 +470,8 @@ function port.castMark(e)
                 end
             else
                 --No Magicka Required
-                modData.cell = cell
-                modData.position = position
+                modData.cell = cell.id
+                modData.position = { position.x, position.y, position.z }
                 if config.playSound == true then
                     tes3.playSound({ sound = "mysticism cast", volume = 0.8 })
                 end
