@@ -11,9 +11,10 @@ local defaultConfig = {
     useScroll = true,
     playSound = true,
     playEffect = true,
-    debugMode = false,
     playerSkillReq = 75,
-    npcSkillReq = 50
+    npcSkillReq = 50,
+    mExpanded = false,
+    logLevel = "NONE"
 }
 
 

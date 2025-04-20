@@ -4,8 +4,16 @@ local function initialized()
 end
 event.register("initialized", initialized)
 
-
 local config = require("friendlyIntervention.config")
+
+local logger = require("logging.logger")
+local log = logger.new{
+    name = "Friendly Intervention",
+    logLevel = "TRACE",
+}
+log:setLogLevel(config.logLevel)
+
+
 local companionTable = {}
 local portFlag = 0
 local teleType = 0
@@ -22,9 +30,7 @@ local scrollType = {
 ----Companion Check-------------------------------------------------------------------------------------------------------------
 local function validCompanionCheck(mobileActor)
     local name = mobileActor.object.name
-    if config.debugMode == true then
-        print("Checking " .. name .. ".")
-    end
+    log:trace("Checking " .. name .. "...")
 	if (mobileActor == tes3.mobilePlayer) then
 		return false
 	end
@@ -37,6 +43,7 @@ local function validCompanionCheck(mobileActor)
 	end
     local fishCheck = string.endswith(name, "Slaughterfish")
     if fishCheck == true then
+        log:debug("" .. name .. " ends with Slaughterfish, invalid companion!")
         return false
     end
 	return true
@@ -82,9 +89,7 @@ local function companionTeleport(companionsT)
                 modMagic = false
                 modMessage = false
                 modTrain = false
-                if config.debugMode == true then
-                    print("[Friendly Intervention]: " .. name .. " is a summoned creature. Free teleport!")
-                end
+                log:info("" .. name .. " is a summoned creature. Free teleport!")
             end
         end
         ----Skill Requirement----------------------------------------------------------------------------------------------------------------------------------
@@ -93,17 +98,14 @@ local function companionTeleport(companionsT)
             ----Player Skill Check-----------------------------------------------------------------------------------------------------------------------------
             if config.playerSkill == true then
                 local pMyst = tes3.mobilePlayer.mysticism.current
+                log:debug("Checking " .. pMyst .. " vs " .. config.playerSkillReq .. "...")
                 ----Player Skill Check Passed------------------------------------------------------------------------------------------------------------------
                 if pMyst >= config.playerSkillReq then
                     skillFlag = 1
-                    if config.debugMode == true then
-                        print("[Friendly Intervention]: Player's Mysticism skill check passed for " .. name .. ".")
-                    end
+                    log:debug("Player's Mysticism skill check passed for " .. name .. ".")
                 else
                     ----Player Skill Check Failed--------------------------------------------------------------------------------------------------------------
-                    if config.debugMode == true then
-                        print("[Friendly Intervention]: Player's Mysticism skill check failed for " .. name .. ".")
-                    end
+                    log:debug("Player's Mysticism skill check failed for " .. name .. ".")
                 end
             end
             ----Companion Skill Check---------------------------------------------------------------------------------------------------------------------------
@@ -111,38 +113,29 @@ local function companionTeleport(companionsT)
                 local npcMyst = companionRef.mobile:getSkillValue(14)
                 if npcMyst == nil then
                     npcMyst = 0
-                    if config.debugMode == true then
-                        print("[Friendly Intervention]: " .. name .."'s Mysticism skill returned nil. Changed to 0.")
-                    end
+                    log:warn("" .. name .."'s Mysticism skill returned nil. Changed to 0.")
                 end
                 ----Creature Check--------------------------------------------------------------------------------------------------------------------
                 local creatCheck = companionRef.object.class
                 if creatCheck == nil then
                     local typeCheck = companionRef.object.type
                     npcMyst = 0
-                    if config.debugMode == true then
-                        print("[Friendly Intervention]: " .. name .. " is a Creature. Will not count toward companion skill.")
-                    end
+                    log:info("" .. name .. " is a Creature. Will not count toward companion skill unless they are Daedra.")
                     ----Daedra Check------------------------------------------------------------------------------------------------------------------
                     if typeCheck == 1 then
                         npcMyst = config.npcSkillReq
-                        if config.debugMode == true then
-                            print("[Friendly Intervention]: " .. name .. " is a Daedra. Will teleport themselves.")
-                        end
+                        log:info("" .. name .. " is a Daedra. Will teleport themselves.")
                     end
                 end
                 ----Companion Check Passed------------------------------------------------------------------------------------------------------------
+                log:debug("Checking " .. npcMyst .. " vs " .. config.npcSkillReq .. "...")
                 if npcMyst >= config.npcSkillReq then
                     skillFlag = 1
                     selectionRef = 1
-                    if config.debugMode == true then
-                        print("[Friendly Intervention]: " .. name .. "'s Mysticism check passed.")
-                    end
+                    log:debug("" .. name .. "'s Mysticism check passed.")
                 else
                     ----Companion Check Failed--------------------------------------------------------------------------------------------------------
-                    if config.debugMode == true then
-                        print("[Friendly Intervention]: " .. name .. "'s Mysticism check failed.")
-                    end
+                    log:debug("" .. name .. "'s Mysticism check failed.")
                 end
             end
             ----Skill Check PASSED-------------------------------------------------------------------------------------------------------------------------------
@@ -153,9 +146,7 @@ local function companionTeleport(companionsT)
                     local currentMyst = mgkChoice[selectionRef].mobile:getSkillValue(14)
                     if currentMyst == nil then
                         currentMyst = 1
-                        if config.debugMode == true then
-                            print("[Friendly Intervention]: " .. mgkChoice[selectionRef].object.name .."'s Mysticism skill returned nil. Changed to 1.")
-                        end
+                        log:warn("" .. mgkChoice[selectionRef].object.name .."'s Mysticism skill returned nil. Changed to 1.")
                     end
                     ----Mysticism Cost Reduction-----------------------------------------------------------------------------------------------------------------
                     local mystMod = (currentMyst / 200)
@@ -163,16 +154,12 @@ local function companionTeleport(companionsT)
                     local costRound = math.round(cost)
                     if costRound < 1 then
                         costRound = 1
-                        if config.debugMode == true then
-                            print("[Friendly Intervention]: " .. mgkChoice[selectionRef].object.name .. "'s Magicka cost below 1. Changed to 1.")
-                        end
+                        log:warn("" .. mgkChoice[selectionRef].object.name .. "'s Magicka cost below 1. Changed to 1.")
                     end
                     ----Low Magicka------------------------------------------------------------------------------------------------------------------------------
                     if currentMgk < costRound then
                         mgkFlag = 0
-                        if config.debugMode == true then
-                            print("[Friendly Intervention]: " .. mgkChoice[selectionRef].object.name .." has low magicka.")
-                        end
+                        log:info("" .. mgkChoice[selectionRef].object.name .." has low magicka.")
                         ----Player Covers for low Companion Magicka if Skill req is met--------------------------------------------------------------------------
                         local mgkSave = tes3.player.mobile.magicka.current
                         local mystSave = tes3.player.mobile.mysticism.current
@@ -183,9 +170,7 @@ local function companionTeleport(companionsT)
                                     mgkFlag = 1
                                     selectionRef = 0
                                     saved = 1
-                                    if config.debugMode == true then
-                                        print("[Friendly Intervention]: " .. name .. " had low magicka. Player will cover cost.")
-                                    end
+                                    log:info("" .. mgkChoice[selectionRef].object.name .." had low magicka. Player will cover cost.")
                                 end
                             end
                         end
@@ -201,9 +186,7 @@ local function companionTeleport(companionsT)
                                     if modMessage == true then
                                         tes3.messageBox("" .. portSummary[selectionRef] .. " Low magicka. Scroll used.")
                                     end
-                                    if config.debugMode == true then
-                                        print("[Friendly Intervention]: " .. name .. " teleported. Skill check passed. Low magicka. Scroll used.")
-                                    end
+                                    log:info("" .. name .. " teleported. Skill check passed. Low magicka. Scroll used.")
                                     if config.playSound == true then
                                         tes3.playSound({ sound = "mysticism area", volume = 0.7, pitch = pitchMod3  })
                                     end
@@ -211,9 +194,7 @@ local function companionTeleport(companionsT)
                                     if modMessage == true then
                                         tes3.messageBox("" .. name .. " was left behind. Low magicka. No scroll.")
                                     end
-                                    if config.debugMode == true then
-                                        print("[Friendly Intervention]: " .. name .. " was left behind. Skill check passed. Low magicka. No scroll.")
-                                    end
+                                    log:info("" .. name .. " was left behind. Skill check passed. Low magicka. No scroll.")
                                 end
                             end
                         else
@@ -221,9 +202,7 @@ local function companionTeleport(companionsT)
                                 if modMessage == true then
                                     tes3.messageBox("" .. name .. " was left behind. Low magicka.")
                                 end
-                                if config.debugMode == true then
-                                    print("[Friendly Intervention]: " .. name .. " was left behind. Skill check passed. Low magicka.")
-                                end
+                                log:info("" .. name .. " was left behind. Skill check passed. Low magicka.")
                             end
                         end
                     end
@@ -233,9 +212,7 @@ local function companionTeleport(companionsT)
                         if selectionRef == 0 then
                             if modTrain == true then
                                 tes3.player.mobile:exerciseSkill(14, 1)
-                                if config.debugMode == true then
-                                    print("[Friendly Intervention]: Player Mysticism skill exercised when transporting " .. name .. ".")
-                                end
+                                log:info("Player Mysticism skill exercised when transporting " .. name .. ".")
                             end
                         end
                         tes3.setStatistic({ name = "magicka", current = (currentMgk2 - costRound), reference = mgkChoice[selectionRef] })
@@ -251,9 +228,7 @@ local function companionTeleport(companionsT)
                         if modMessage == true then
                             tes3.messageBox("" .. portSummary[selectionRef] .. " " .. costRound .. " magicka spent.")
                         end
-                        if config.debugMode == true then
-                            print("[Friendly Intervention]: " .. name .. " teleported. " .. costRound .. " Magicka spent. Skill check passed. Player Mysticism: " .. tes3.mobilePlayer.mysticism.current .. ", Companion Mysticism: " .. companionRef.mobile:getSkillValue(14) .. "")
-                        end
+                        log:info("" .. name .. " teleported. " .. costRound .. " Magicka spent. Skill check passed. Player Mysticism: " .. tes3.mobilePlayer.mysticism.current .. ", Companion Mysticism: " .. companionRef.mobile:getSkillValue(14) .. "")
                         if config.playSound == true then
                             if selectionRef == 0 then
                                 tes3.playSound({ sound = "mysticism hit", volume = 0.7, pitch = pitchMod3  })
@@ -277,17 +252,13 @@ local function companionTeleport(companionsT)
                     if selectionRef == 0 then
                         if modTrain == true then
                             tes3.player.mobile:exerciseSkill(14, 1)
-                            if config.debugMode == true then
-                                print("[Friendly Intervention]: Player Mysticism skill exercised when transporting " .. name .. ".")
-                            end
+                            log:info("Player Mysticism skill exercised when transporting " .. name .. ".")
                         end
                     end
                     if modMessage == true then
                         tes3.messageBox("" .. portSummary[selectionRef] .. "")
                     end
-                    if config.debugMode == true then
-                        print("[Friendly Intervention]: " .. name .. " teleported. No magicka check. Skill check passed. Player Mysticism: " .. tes3.mobilePlayer.mysticism.current .. ", Companion Mysticism: " .. companionRef.mobile:getSkillValue(14) .. "")
-                    end
+                    log:info("" .. name .. " teleported. No magicka check. Skill check passed. Player Mysticism: " .. tes3.mobilePlayer.mysticism.current .. ", Companion Mysticism: " .. companionRef.mobile:getSkillValue(14) .. "")
                     if config.playSound == true then
                         if selectionRef == 0 then
                             tes3.playSound({ sound = "mysticism hit", volume = 0.7, pitch = pitchMod3  })
@@ -311,9 +282,7 @@ local function companionTeleport(companionsT)
                         if modMessage == true then
                             tes3.messageBox("" .. portSummary[selectionRef] .. " Scroll used.")
                         end
-                        if config.debugMode == true then
-                            print("[Friendly Intervention]: " .. name .. " teleported. Skill check failed. Scroll used.")
-                        end
+                        log:info("" .. name .. " teleported. Skill check failed. Scroll used.")
                         if config.playSound == true then
                             tes3.playSound({ sound = "mysticism area", volume = 0.7, pitch = pitchMod3  })
                         end
@@ -321,17 +290,13 @@ local function companionTeleport(companionsT)
                         if modMessage == true then
                             tes3.messageBox("" .. name .. " was left behind. No scroll.")
                         end
-                        if config.debugMode == true then
-                            print("[Friendly Intervention]: " .. name .. " was left behind. Skill check failed. No scroll.")
-                        end
+                        log:info("" .. name .. " was left behind. Skill check failed. No scroll.")
                     end
                 else
                     if modMessage == true then
                         tes3.messageBox("" .. name .. " was left behind.")
                     end
-                    if config.debugMode == true then
-                        print("[Friendly Intervention]: " .. name .. " was left behind. Skill check failed. Player Mysticism: " .. tes3.mobilePlayer.mysticism.current .. ", Companion Mysticism: " .. companionRef.mobile:getSkillValue(14) .. "")
-                    end
+                    log:info("" .. name .. " was left behind. Skill check failed. Player Mysticism: " .. tes3.mobilePlayer.mysticism.current .. ", Companion Mysticism: " .. companionRef.mobile:getSkillValue(14) .. "")
                 end
             end
         else
@@ -363,9 +328,7 @@ local function companionTeleport(companionsT)
                             if modMessage == true then
                                 tes3.messageBox("" .. portSummary[selectionRef] .. " Low magicka. Scroll used.")
                             end
-                            if config.debugMode == true then
-                                print("[Friendly Intervention]: " .. name .. " teleported. Mysticism skill not required. Low magicka. Scroll used.")
-                            end
+                            log:info("" .. name .. " teleported. Mysticism skill not required. Low magicka. Scroll used.")
                             if config.playSound == true then
                                 tes3.playSound({ sound = "mysticism area", volume = 0.7, pitch = pitchMod3  })
                             end
@@ -373,17 +336,13 @@ local function companionTeleport(companionsT)
                             if modMessage == true then
                                 tes3.messageBox("" .. name .. " was left behind. Low magicka. No scroll.")
                             end
-                            if config.debugMode == true then
-                                print("[Friendly Intervention]: " .. name .. " was left behind. Mysticism skill not required. Low magicka. No scroll.")
-                            end
+                            log:info("" .. name .. " was left behind. Mysticism skill not required. Low magicka. No scroll.")
                         end
                     else
                         if modMessage == true then
                             tes3.messageBox("" .. name .. " was left behind. Low magicka.")
                         end
-                        if config.debugMode == true then
-                            print("[Friendly Intervention]: " .. name .. " was left behind. Mysticism skill not required. Low magicka.")
-                        end
+                        log:info("" .. name .. " was left behind. Mysticism skill not required. Low magicka.")
                     end
                 end
                 ----Enough Magicka------------------------------------------------------------------------------------------------------------------------------------
@@ -401,17 +360,13 @@ local function companionTeleport(companionsT)
                     if selectionRef == 0 then
                         if modTrain == true then
                             tes3.player.mobile:exerciseSkill(14, 1)
-                            if config.debugMode == true then
-                                print("[Friendly Intervention]: Player Mysticism skill exercised when transporting " .. name .. ".")
-                            end
+                            log:info("Player Mysticism skill exercised when transporting " .. name .. ".")
                         end
                     end
                     if modMessage == true then
                         tes3.messageBox("" .. portSummary[selectionRef] .. " " .. costRound .. " magicka spent.")
                     end
-                    if config.debugMode == true then
-                        print("[Friendly Intervention]: " .. name .. " teleported. Mysticism skill not required. " .. costRound .. " magicka spent.")
-                    end
+                    log:info("" .. name .. " teleported. Mysticism skill not required. " .. costRound .. " magicka spent.")
                     if config.playSound == true then
                         if selectionRef == 0 then
                             tes3.playSound({ sound = "mysticism hit", volume = 0.7, pitch = pitchMod3  })
@@ -430,17 +385,13 @@ local function companionTeleport(companionsT)
                 if selectionRef == 0 then
                     if modTrain == true then
                         tes3.player.mobile:exerciseSkill(14, 1)
-                        if config.debugMode == true then
-                            print("[Friendly Intervention]: Player Mysticism skill exercised when transporting " .. name .. ".")
-                        end
+                        log:info("Player Mysticism skill exercised when transporting " .. name .. ".")
                     end
                 end
                 if modMessage == true then
                     tes3.messageBox("" .. portSummary[selectionRef] .. "")
                 end
-                if config.debugMode == true then
-                    print("[Friendly Intervention]: " .. name .. " teleported. Mysticism skill not required. No magicka spent.")
-                end
+                log:info("" .. name .. " teleported. Mysticism skill not required. No magicka spent.")
                 if config.playSound == true then
                     tes3.playSound({ sound = "mysticism hit", volume = 0.7, pitch = pitchMod3  })
                 end
@@ -462,9 +413,7 @@ local function companionCheckT(e)
     for mobileActor in tes3.iterate(tes3.mobilePlayer.friendlyActors) do
         if (validCompanionCheck(mobileActor)) then
             companionTable[#companionTable +1] = mobileActor.reference
-            if config.debugMode == true then
-                print("[Friendly Intervention]: " .. mobileActor.reference.object.name .. " added to teleport list.")
-            end
+            log:debug("" .. mobileActor.reference.object.name .. " added to teleport list.")
         end
 		timer.start({ duration = 1, callback = companionTeleportBS })
 	end
@@ -487,11 +436,15 @@ local function companionCheckTBridge(e)
         portFlag = 1
         teleType = 2
     end
+    if config.mExpanded == true then
+        if (effect[1].id == 241 or effect[1].id == 242 or effect[1].id == 243 or effect[1].id == 244 or effect[1].id == 245 or effect[1].id == 246 or effect[1].id == 247 or effect[1].id == 248 or effect[1].id == 249 or effect[1].id == 250 or effect[1].id == 251 or effect[1].id == 310) then
+            portFlag = 1
+            teleType = 2
+        end
+    end
 	if config.modEnabled == true then
 		if portFlag ~= 1 then return end
-        if config.debugMode == true then
-            print("[Friendly Intervention]: Effect " .. effect[1].id .. " detected.(63 = Almsivi, 62 = Divine, 61 = Recall) Initializing companion check.")
-        end
+        log:debug("Effect " .. effect[1].id .. " detected. (63 = Almsivi, 62 = Divine, 61 or 241-242/310 = Recall) Initializing companion check.")
 		companionCheckT(e)
 	end
     portFlag = 0
@@ -499,6 +452,8 @@ end
 event.register(tes3.event.magicCasted, companionCheckTBridge)
 
 
+----PF----------------
+--1.1 added support for magicka expanded teleportation effects, updated debug, updated MCM. magicka expanded teleportation already transports companions but with this turned on they will consume magicka/scrolls as well
 
 
 

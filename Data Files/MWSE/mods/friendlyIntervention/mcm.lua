@@ -1,5 +1,7 @@
 local EasyMCM = require("easyMCM.EasyMCM");
 local config  = require("friendlyIntervention.config")
+local logger = require("logging.logger")
+local log = logger.getLogger("Friendly Intervention")
 
 local modName = 'Friendly Intervention';
 local template = EasyMCM.createTemplate{ name = modName}
@@ -134,7 +136,23 @@ globalSettings:createOnOffButton{
 }
 
 globalSettings:createOnOffButton{
-    label = "Debug Mode",
-    description = "Turn on or off MWSE log debug messages.",
-    variable = mwse.mcm.createTableVariable{ id = "debugMode", table = config }
+    label = "Magicka Expanded Teleportation",
+    description = "Toggle on or off support for Magicka Expanded's teleportation spell effects.",
+    variable = mwse.mcm.createTableVariable{ id = "mExpanded", table = config }
 }
+
+globalSettings:createDropdown{
+    label = "Debug Logging Level",
+    description = "Set the log level.",
+    options = {
+      { label = "TRACE", value = "TRACE"},
+      { label = "DEBUG", value = "DEBUG"},
+      { label = "INFO", value = "INFO"},
+      { label = "ERROR", value = "ERROR"},
+      { label = "NONE", value = "NONE"},
+    },
+    variable = mwse.mcm.createTableVariable{ id = "logLevel", table = config },
+    callback = function(self)
+      log:setLogLevel(self.variable.value)
+    end
+  }
