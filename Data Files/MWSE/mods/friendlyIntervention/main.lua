@@ -1,70 +1,42 @@
 ----Initialize-------------------------------------------------------------------------------------------------------------------
-local function initialized()
-    print("[Friendly Intervention]: Initialized.")
-end
-event.register("initialized", initialized)
-
 local config = require("friendlyIntervention.config")
-
 local logger = require("logging.logger")
-local log = logger.new{
+local func = require("friendlyIntervention.common")
+local tables = require("friendlyIntervention.tables")
+
+local log = logger.new {
     name = "Friendly Intervention",
     logLevel = "TRACE",
 }
 log:setLogLevel(config.logLevel)
 
-
-local companionTable = {}
-local portFlag = 0
-local teleType = 0
-local scrollType = {
-    [0] = "sc_almsiviintervention",
-    [1] = "sc_divineintervention",
-    [2] = "sc_leaguestep"
-}
-
-
-
-
-
-----Companion Check-------------------------------------------------------------------------------------------------------------
-local function validCompanionCheck(mobileActor)
-    local name = mobileActor.object.name
-    log:trace("Checking " .. name .. "...")
-	if (mobileActor == tes3.mobilePlayer) then
-		return false
-	end
-	if (tes3.getCurrentAIPackageId(mobileActor) ~= tes3.aiPackage.follow) then
-		return false
-	end
-	local animState = mobileActor.actionData.animationAttackState
-	if (mobileActor.health.current <= 0 or animState == tes3.animationState.dying or animState == tes3.animationState.dead) then
-		return false
-	end
-    local fishCheck = string.endswith(name, "Slaughterfish")
-    if fishCheck == true then
-        log:debug("" .. name .. " ends with Slaughterfish, invalid companion!")
-        return false
-    end
-	return true
+local function initialized(e)
+    log:info("Initialized.")
 end
 
+event.register("initialized", initialized)
+
+local companionTable = {}
+local enchantTable = {}
+local portFlag = 0
+local teleType = 0
 
 
-----Teleportation-----------------------------------------------------------------------------------------------------------------
-local function companionTeleport(companionsT)
-	for i = #companionsT, 1, -1 do
-		local companionRef = companionsT[i]
+
+
+
+----Regular Teleportation-----------------------------------------------------------------------------------------------------------------
+local function companionTeleport()
+    for i = #companionTable, 1, -1 do
+        local companionRef = companionTable[i]
         local name = companionRef.object.name
         local modSkill = config.skillLimit
         local modMagic = config.magickaReq
         local modMessage = config.msgEnabled
         local modTrain = config.trainMyst
-		local cellPosition = tes3.getPlayerCell()
-		local cameraPosition = tes3.getCameraPosition()
-        local pitchMod = math.random()
-		local pitchMod2 = math.random()
-		local pitchMod3 = (pitchMod + pitchMod2)
+        local cellPosition = tes3.getPlayerCell()
+        local cameraPosition = tes3.getCameraPosition()
+        local pitch = func.calculatePitch()
         local mgkFlag = 1
         local selectionRef = 0
         local portSummary = {
@@ -75,12 +47,6 @@ local function companionTeleport(companionsT)
             [0] = tes3.player,
             [1] = companionRef
         }
-		if pitchMod3 < 0.80 then
-			pitchMod3 = 0.80
-		end
-		if pitchMod3 > 1.20 then
-			pitchMod3 = 1.20
-		end
         ----Summoned Creature Check----------------------------------------------------------------------------------------------------------------------------
         if config.smnFree == true then
             local smnCheck = string.startswith(name, "Summoned")
@@ -113,23 +79,24 @@ local function companionTeleport(companionsT)
                 local npcMyst = companionRef.mobile:getSkillValue(14)
                 if npcMyst == nil then
                     npcMyst = 0
-                    log:warn("" .. name .."'s Mysticism skill returned nil. Changed to 0.")
+                    log:warn("" .. name .. "'s Mysticism skill returned nil. Changed to 0.")
                 end
                 ----Creature Check--------------------------------------------------------------------------------------------------------------------
                 local creatCheck = companionRef.object.class
                 if creatCheck == nil then
                     local typeCheck = companionRef.object.type
                     npcMyst = 0
-                    log:info("" .. name .. " is a Creature. Will not count toward companion skill unless they are Daedra.")
+                    log:info("" ..
+                        name .. " is a Creature. Will not count toward companion skill unless they are Daedra.")
                     ----Daedra Check------------------------------------------------------------------------------------------------------------------
                     if typeCheck == 1 then
-                        npcMyst = config.npcSkillReq
+                        npcMyst = config.npcSkillReqS
                         log:info("" .. name .. " is a Daedra. Will teleport themselves.")
                     end
                 end
                 ----Companion Check Passed------------------------------------------------------------------------------------------------------------
-                log:debug("Checking " .. npcMyst .. " vs " .. config.npcSkillReq .. "...")
-                if npcMyst >= config.npcSkillReq then
+                log:debug("Checking " .. npcMyst .. " vs " .. config.npcSkillReqS .. "...")
+                if npcMyst >= config.npcSkillReqS then
                     skillFlag = 1
                     selectionRef = 1
                     log:debug("" .. name .. "'s Mysticism check passed.")
@@ -144,22 +111,11 @@ local function companionTeleport(companionsT)
                 if modMagic == true then
                     local currentMgk = mgkChoice[selectionRef].mobile.magicka.current
                     local currentMyst = mgkChoice[selectionRef].mobile:getSkillValue(14)
-                    if currentMyst == nil then
-                        currentMyst = 1
-                        log:warn("" .. mgkChoice[selectionRef].object.name .."'s Mysticism skill returned nil. Changed to 1.")
-                    end
-                    ----Mysticism Cost Reduction-----------------------------------------------------------------------------------------------------------------
-                    local mystMod = (currentMyst / 200)
-                    local cost = (config.magickaMod * (1 - mystMod))
-                    local costRound = math.round(cost)
-                    if costRound < 1 then
-                        costRound = 1
-                        log:warn("" .. mgkChoice[selectionRef].object.name .. "'s Magicka cost below 1. Changed to 1.")
-                    end
+                    local costRound = func.calculateCost(currentMyst)
                     ----Low Magicka------------------------------------------------------------------------------------------------------------------------------
                     if currentMgk < costRound then
                         mgkFlag = 0
-                        log:info("" .. mgkChoice[selectionRef].object.name .." has low magicka.")
+                        log:info("" .. mgkChoice[selectionRef].object.name .. " has low magicka.")
                         ----Player Covers for low Companion Magicka if Skill req is met--------------------------------------------------------------------------
                         local mgkSave = tes3.player.mobile.magicka.current
                         local mystSave = tes3.player.mobile.mysticism.current
@@ -170,31 +126,37 @@ local function companionTeleport(companionsT)
                                     mgkFlag = 1
                                     selectionRef = 0
                                     saved = 1
-                                    log:info("" .. mgkChoice[selectionRef].object.name .." had low magicka. Player will cover cost.")
+                                    log:info("" ..
+                                        mgkChoice[selectionRef].object.name ..
+                                        " had low magicka. Player will cover cost.")
                                 end
                             end
                         end
                         ----Scroll Check-------------------------------------------------------------------------------------------------------------------------
                         if config.useScroll == true then
                             if saved == 0 then
-                                local removedCount = tes3.removeItem({ reference = tes3.mobilePlayer, item = scrollType[teleType] })
+                                local removedCount = tes3.removeItem({ reference = tes3.mobilePlayer,
+                                    item = tables.scrollType[teleType] })
                                 if removedCount == 1 then
-                                    tes3.positionCell({ reference = companionRef, cell = cellPosition, position = cameraPosition })
+                                    tes3.positionCell({ reference = companionRef, cell = cellPosition,
+                                        position = cameraPosition })
                                     if config.playEffect == true then
-                                        tes3.createVisualEffect({ object = "VFX_MysticismArea", lifespan = 2, verticalOffset = 70, scale = 4, reference = companionRef })
+                                        tes3.createVisualEffect({ object = "VFX_MysticismArea", lifespan = 2,
+                                            verticalOffset = 70, scale = 4, reference = companionRef })
                                     end
                                     if modMessage == true then
                                         tes3.messageBox("" .. portSummary[selectionRef] .. " Low magicka. Scroll used.")
                                     end
                                     log:info("" .. name .. " teleported. Skill check passed. Low magicka. Scroll used.")
                                     if config.playSound == true then
-                                        tes3.playSound({ sound = "mysticism area", volume = 0.7, pitch = pitchMod3  })
+                                        tes3.playSound({ sound = "mysticism area", volume = 0.7, pitch = pitch })
                                     end
                                 else
                                     if modMessage == true then
                                         tes3.messageBox("" .. name .. " was left behind. Low magicka. No scroll.")
                                     end
-                                    log:info("" .. name .. " was left behind. Skill check passed. Low magicka. No scroll.")
+                                    log:info("" ..
+                                        name .. " was left behind. Skill check passed. Low magicka. No scroll.")
                                 end
                             end
                         else
@@ -215,26 +177,35 @@ local function companionTeleport(companionsT)
                                 log:info("Player Mysticism skill exercised when transporting " .. name .. ".")
                             end
                         end
-                        tes3.setStatistic({ name = "magicka", current = (currentMgk2 - costRound), reference = mgkChoice[selectionRef] })
+                        tes3.setStatistic({ name = "magicka", current = (currentMgk2 - costRound),
+                            reference = mgkChoice[selectionRef] })
                         tes3.positionCell({ reference = companionRef, cell = cellPosition, position = cameraPosition })
                         if config.playEffect == true then
                             if selectionRef == 0 then
-                                tes3.createVisualEffect({ object = "VFX_MysticismHit", lifespan = 3, reference = companionRef })
+                                tes3.createVisualEffect({ object = "VFX_MysticismHit", lifespan = 3,
+                                    reference = companionRef })
                             end
                             if selectionRef == 1 then
-                                tes3.createVisualEffect({ object = "VFX_MysticismCast", lifespan = 2, verticalOffset = 0, scale = 0.6, reference = companionRef })
+                                tes3.createVisualEffect({ object = "VFX_MysticismCast", lifespan = 2, verticalOffset = 0,
+                                    scale = 0.6, reference = companionRef })
                             end
                         end
                         if modMessage == true then
                             tes3.messageBox("" .. portSummary[selectionRef] .. " " .. costRound .. " magicka spent.")
                         end
-                        log:info("" .. name .. " teleported. " .. costRound .. " Magicka spent. Skill check passed. Player Mysticism: " .. tes3.mobilePlayer.mysticism.current .. ", Companion Mysticism: " .. companionRef.mobile:getSkillValue(14) .. "")
+                        log:info("" ..
+                            name ..
+                            " teleported. " ..
+                            costRound ..
+                            " Magicka spent. Skill check passed. Player Mysticism: " ..
+                            tes3.mobilePlayer.mysticism.current ..
+                            ", Companion Mysticism: " .. companionRef.mobile:getSkillValue(14) .. "")
                         if config.playSound == true then
                             if selectionRef == 0 then
-                                tes3.playSound({ sound = "mysticism hit", volume = 0.7, pitch = pitchMod3  })
+                                tes3.playSound({ sound = "mysticism hit", volume = 0.7, pitch = pitch })
                             end
                             if selectionRef == 1 then
-                                tes3.playSound({ sound = "mysticism cast", volume = 0.7, pitch = pitchMod3  })
+                                tes3.playSound({ sound = "mysticism cast", volume = 0.7, pitch = pitch })
                             end
                         end
                     end
@@ -246,7 +217,8 @@ local function companionTeleport(companionsT)
                             tes3.createVisualEffect({ object = "VFX_MysticismHit", lifespan = 3, reference = companionRef })
                         end
                         if selectionRef == 1 then
-                            tes3.createVisualEffect({ object = "VFX_MysticismCast", lifespan = 2, verticalOffset = 0, scale = 0.6, reference = companionRef })
+                            tes3.createVisualEffect({ object = "VFX_MysticismCast", lifespan = 2, verticalOffset = 0,
+                                scale = 0.6, reference = companionRef })
                         end
                     end
                     if selectionRef == 0 then
@@ -258,13 +230,17 @@ local function companionTeleport(companionsT)
                     if modMessage == true then
                         tes3.messageBox("" .. portSummary[selectionRef] .. "")
                     end
-                    log:info("" .. name .. " teleported. No magicka check. Skill check passed. Player Mysticism: " .. tes3.mobilePlayer.mysticism.current .. ", Companion Mysticism: " .. companionRef.mobile:getSkillValue(14) .. "")
+                    log:info("" ..
+                        name ..
+                        " teleported. No magicka check. Skill check passed. Player Mysticism: " ..
+                        tes3.mobilePlayer.mysticism.current ..
+                        ", Companion Mysticism: " .. companionRef.mobile:getSkillValue(14) .. "")
                     if config.playSound == true then
                         if selectionRef == 0 then
-                            tes3.playSound({ sound = "mysticism hit", volume = 0.7, pitch = pitchMod3  })
+                            tes3.playSound({ sound = "mysticism hit", volume = 0.7, pitch = pitch })
                         end
                         if selectionRef == 1 then
-                            tes3.playSound({ sound = "mysticism cast", volume = 0.7, pitch = pitchMod3  })
+                            tes3.playSound({ sound = "mysticism cast", volume = 0.7, pitch = pitch })
                         end
                     end
                 end
@@ -273,18 +249,20 @@ local function companionTeleport(companionsT)
             if skillFlag == 0 then
                 ----Scroll Check---------------------------------------------------------------------------------------------------------------------------------------
                 if config.useScroll == true then
-                    local removedCount = tes3.removeItem({ reference = tes3.mobilePlayer, item = scrollType[teleType] })
+                    local removedCount = tes3.removeItem({ reference = tes3.mobilePlayer,
+                        item = tables.scrollType[teleType] })
                     if removedCount == 1 then
                         tes3.positionCell({ reference = companionRef, cell = cellPosition, position = cameraPosition })
                         if config.playEffect == true then
-                            tes3.createVisualEffect({ object = "VFX_MysticismArea", lifespan = 2, verticalOffset = 70, scale = 4, reference = companionRef })
+                            tes3.createVisualEffect({ object = "VFX_MysticismArea", lifespan = 2, verticalOffset = 70,
+                                scale = 4, reference = companionRef })
                         end
                         if modMessage == true then
                             tes3.messageBox("" .. portSummary[selectionRef] .. " Scroll used.")
                         end
                         log:info("" .. name .. " teleported. Skill check failed. Scroll used.")
                         if config.playSound == true then
-                            tes3.playSound({ sound = "mysticism area", volume = 0.7, pitch = pitchMod3  })
+                            tes3.playSound({ sound = "mysticism area", volume = 0.7, pitch = pitch })
                         end
                     else
                         if modMessage == true then
@@ -296,7 +274,11 @@ local function companionTeleport(companionsT)
                     if modMessage == true then
                         tes3.messageBox("" .. name .. " was left behind.")
                     end
-                    log:info("" .. name .. " was left behind. Skill check failed. Player Mysticism: " .. tes3.mobilePlayer.mysticism.current .. ", Companion Mysticism: " .. companionRef.mobile:getSkillValue(14) .. "")
+                    log:info("" ..
+                        name ..
+                        " was left behind. Skill check failed. Player Mysticism: " ..
+                        tes3.mobilePlayer.mysticism.current ..
+                        ", Companion Mysticism: " .. companionRef.mobile:getSkillValue(14) .. "")
                 end
             end
         else
@@ -305,38 +287,34 @@ local function companionTeleport(companionsT)
             if modMagic == true then
                 local currentMgk = mgkChoice[selectionRef].mobile.magicka.current
                 local currentMyst = mgkChoice[selectionRef].mobile:getSkillValue(14)
-                if currentMyst == nil then
-                    currentMyst = 1
-                end
-                local mystMod = (currentMyst / 200)
-                local cost = (config.magickaMod * (1 - mystMod))
-                local costRound = math.round(cost)
-                if costRound < 1 then
-                    costRound = 1
-                end
+                local costRound = func.calculateCost(currentMyst)
                 ----Low Magicka---------------------------------------------------------------------------------------------------------------------------------------
                 if currentMgk < costRound then
                     mgkFlag = 0
                     ----Scroll Check----------------------------------------------------------------------------------------------------------------------------------
                     if config.useScroll == true then
-                        local removedCount = tes3.removeItem({ reference = tes3.mobilePlayer, item = scrollType[teleType] })
+                        local removedCount = tes3.removeItem({ reference = tes3.mobilePlayer,
+                            item = tables.scrollType[teleType
+                                ] })
                         if removedCount == 1 then
                             tes3.positionCell({ reference = companionRef, cell = cellPosition, position = cameraPosition })
                             if config.playEffect == true then
-                                tes3.createVisualEffect({ object = "VFX_MysticismArea", lifespan = 2, verticalOffset = 70, scale = 4, reference = companionRef })
+                                tes3.createVisualEffect({ object = "VFX_MysticismArea", lifespan = 2, verticalOffset = 70,
+                                    scale = 4, reference = companionRef })
                             end
                             if modMessage == true then
                                 tes3.messageBox("" .. portSummary[selectionRef] .. " Low magicka. Scroll used.")
                             end
                             log:info("" .. name .. " teleported. Mysticism skill not required. Low magicka. Scroll used.")
                             if config.playSound == true then
-                                tes3.playSound({ sound = "mysticism area", volume = 0.7, pitch = pitchMod3  })
+                                tes3.playSound({ sound = "mysticism area", volume = 0.7, pitch = pitch })
                             end
                         else
                             if modMessage == true then
                                 tes3.messageBox("" .. name .. " was left behind. Low magicka. No scroll.")
                             end
-                            log:info("" .. name .. " was left behind. Mysticism skill not required. Low magicka. No scroll.")
+                            log:info("" ..
+                                name .. " was left behind. Mysticism skill not required. Low magicka. No scroll.")
                         end
                     else
                         if modMessage == true then
@@ -347,14 +325,16 @@ local function companionTeleport(companionsT)
                 end
                 ----Enough Magicka------------------------------------------------------------------------------------------------------------------------------------
                 if mgkFlag == 1 then
-                    tes3.setStatistic({ name = "magicka", current = (currentMgk - costRound), reference = mgkChoice[selectionRef] })
+                    tes3.setStatistic({ name = "magicka", current = (currentMgk - costRound),
+                        reference = mgkChoice[selectionRef] })
                     tes3.positionCell({ reference = companionRef, cell = cellPosition, position = cameraPosition })
                     if config.playEffect == true then
                         if selectionRef == 0 then
                             tes3.createVisualEffect({ object = "VFX_MysticismHit", lifespan = 3, reference = companionRef })
                         end
                         if selectionRef == 1 then
-                            tes3.createVisualEffect({ object = "VFX_MysticismCast", lifespan = 2, verticalOffset = 0, scale = 0.6, reference = companionRef })
+                            tes3.createVisualEffect({ object = "VFX_MysticismCast", lifespan = 2, verticalOffset = 0,
+                                scale = 0.6, reference = companionRef })
                         end
                     end
                     if selectionRef == 0 then
@@ -366,13 +346,14 @@ local function companionTeleport(companionsT)
                     if modMessage == true then
                         tes3.messageBox("" .. portSummary[selectionRef] .. " " .. costRound .. " magicka spent.")
                     end
-                    log:info("" .. name .. " teleported. Mysticism skill not required. " .. costRound .. " magicka spent.")
+                    log:info("" ..
+                        name .. " teleported. Mysticism skill not required. " .. costRound .. " magicka spent.")
                     if config.playSound == true then
                         if selectionRef == 0 then
-                            tes3.playSound({ sound = "mysticism hit", volume = 0.7, pitch = pitchMod3  })
+                            tes3.playSound({ sound = "mysticism hit", volume = 0.7, pitch = pitch })
                         end
                         if selectionRef == 1 then
-                            tes3.playSound({ sound = "mysticism cast", volume = 0.7, pitch = pitchMod3  })
+                            tes3.playSound({ sound = "mysticism cast", volume = 0.7, pitch = pitch })
                         end
                     end
                 end
@@ -393,37 +374,52 @@ local function companionTeleport(companionsT)
                 end
                 log:info("" .. name .. " teleported. Mysticism skill not required. No magicka spent.")
                 if config.playSound == true then
-                    tes3.playSound({ sound = "mysticism hit", volume = 0.7, pitch = pitchMod3  })
+                    tes3.playSound({ sound = "mysticism hit", volume = 0.7, pitch = pitch })
                 end
             end
         end
-	end
+    end
     table.clear(companionTable)
 end
 
-
-
-----Bridges-----------------------------------------------------------------------------------------------------------
-local function companionTeleportBS(e)
-	companionTeleport(companionTable)
+----Enchantment Teleportation------------------------------------------------------------------------------------------
+local function companionTeleportE()
+    local cell = tes3.getPlayerCell()
+    local position = tes3.getCameraPosition()
+    for i = #enchantTable, 1, -1 do
+        tes3.positionCell({ reference = enchantTable[i], cell = cell, position = position })
+        log:info("" .. enchantTable[i].object.name .. " teleported using an enchantment.")
+        if config.msgEnabled == true then
+            tes3.messageBox("You transported " .. enchantTable[i].object.name .. " with your enchantment.")
+        end
+        if config.playSound == true then
+            local pitch = func.calculatePitch()
+            tes3.playSound({ sound = "mysticism hit", volume = 0.7, pitch = pitch })
+        end
+        if config.playEffect == true then
+            tes3.createVisualEffect({ object = "VFX_MysticismHit", lifespan = 3, reference = enchantTable[i] })
+        end
+    end
+    table.clear(enchantTable)
 end
 
-
-local function companionCheckT(e)
+----Checks--------------------------------------------------------------------------------------------------------------
+local function companionCheck()
     for mobileActor in tes3.iterate(tes3.mobilePlayer.friendlyActors) do
-        if (validCompanionCheck(mobileActor)) then
-            companionTable[#companionTable +1] = mobileActor.reference
+        if (func.validCompanionCheck(mobileActor)) then
+            companionTable[#companionTable + 1] = mobileActor.reference
             log:debug("" .. mobileActor.reference.object.name .. " added to teleport list.")
         end
-		timer.start({ duration = 1, callback = companionTeleportBS })
-	end
+    end
 end
 
-
-local function companionCheckTBridge(e)
-	if e.caster ~= tes3.player then return end
-	local source = e.source
+local function spellCheck(e)
+    if e.caster ~= tes3.player then return end
+    if config.modEnabled == false then return end
+    local source = e.source
     local effect = source.effects
+
+    --Determine Spell Type
     if effect[1].id == 63 then
         portFlag = 1
         teleType = 0
@@ -437,23 +433,89 @@ local function companionCheckTBridge(e)
         teleType = 2
     end
     if config.mExpanded == true then
-        if (effect[1].id == 241 or effect[1].id == 242 or effect[1].id == 243 or effect[1].id == 244 or effect[1].id == 245 or effect[1].id == 246 or effect[1].id == 247 or effect[1].id == 248 or effect[1].id == 249 or effect[1].id == 250 or effect[1].id == 251 or effect[1].id == 310) then
+        if (
+            effect[1].id == 241 or effect[1].id == 242 or effect[1].id == 243 or effect[1].id == 244 or
+                effect[1].id == 245 or effect[1].id == 246 or effect[1].id == 247 or effect[1].id == 248 or
+                effect[1].id == 249 or effect[1].id == 250 or effect[1].id == 251 or effect[1].id == 310) then
             portFlag = 1
             teleType = 2
         end
     end
-	if config.modEnabled == true then
-		if portFlag ~= 1 then return end
-        log:debug("Effect " .. effect[1].id .. " detected. (63 = Almsivi, 62 = Divine, 61 or 241-242/310 = Recall) Initializing companion check.")
-		companionCheckT(e)
-	end
+
+    --Teleport Detected
+    if portFlag == 1 then
+        log:debug("Effect " ..
+            effect[1].id ..
+            " detected. (63 = Almsivi, 62 = Divine, 61 or 241-242/310 = Recall) Initializing companion check.")
+        companionCheck()
+        if config.useEnchant == false then
+            --No enchantment charges used
+            timer.start({ duration = 1, callback = companionTeleport })
+        else
+            if e.source.objectType == tes3.objectType.enchantment then
+                local itemData = e.sourceInstance.itemData
+                for i = #companionTable, 1, -1 do
+                    local companionRef = companionTable[i]
+                    if (itemData.charge - source.chargeCost) < 0 then
+                        --Not enough charge, go on to normal mode
+                        timer.start({ duration = 1, callback = companionTeleport })
+                        log:debug("Not enough charge left for " .. companionRef.object.name .. ".")
+                        break
+                    else
+                        --Enough Charge
+                        if config.smnFree == true then
+                            local smnCheck = string.startswith(companionRef.object.name, "Summoned")
+                            if smnCheck == true then
+                                log:info("" ..
+                                    companionRef.object.name .. " is a summoned creature. Free enchantment teleport!")
+                            else
+                                itemData.charge = itemData.charge - source.chargeCost
+                            end
+                        else
+                            itemData.charge = itemData.charge - source.chargeCost
+                        end
+                        --Add to enchantment list, remove from regular list
+                        table.remove(companionTable, i)
+                        enchantTable[#enchantTable + 1] = companionRef
+                        log:debug("" .. companionRef.object.name .. " added to enchantment teleport list.")
+                    end
+                end
+                timer.start({ duration = 1, callback = companionTeleportE })
+            else
+                timer.start({ duration = 1, callback = companionTeleport })
+            end
+        end
+    end
     portFlag = 0
 end
-event.register(tes3.event.magicCasted, companionCheckTBridge)
+
+event.register(tes3.event.magicCasted, spellCheck)
 
 
-----PF----------------
---1.1 added support for magicka expanded teleportation effects, updated debug, updated MCM. magicka expanded teleportation already transports companions but with this turned on they will consume magicka/scrolls as well
+--Teleport Menu--------------------------------------------------------------------------------------------------------
+event.register("uiActivated", function()
+    if config.teleportMenu == true then
+        local actor = tes3ui.getServiceActor()
+        if actor and func.validCompanionCheck(actor) then
+            if config.skillLimit == true then
+                local mystSkill = actor:getSkillValue(14)
+                if (mystSkill >= config.npcSkillReqS or mystSkill >= config.npcSkillReqO) then
+                    log:debug("NPC Follower detected. Sufficient Mysticism skill. Giving teleport topic.")
+                    tes3.setGlobal("kl_teleport_topic", 1)
+                else
+                    log:debug("NPC Follower detected. Not enough Mysticism. No teleport topic given.")
+                    tes3.setGlobal("kl_teleport_topic", 0)
+                end
+            else
+                log:debug("NPC Follower detected. Giving teleport topic.")
+                tes3.setGlobal("kl_teleport_topic", 1)
+            end
+        else
+            log:debug("Target not an NPC Follower. No teleport topic given.")
+            tes3.setGlobal("kl_teleport_topic", 0)
+        end
+    end
+end, { filter = "MenuDialog" })
 
 
 
@@ -461,5 +523,5 @@ event.register(tes3.event.magicCasted, companionCheckTBridge)
 --Config Stuff------------------------------------------------------------------------------------------------------------------------------
 event.register("modConfigReady", function()
     require("friendlyIntervention.mcm")
-	config = require("friendlyIntervention.config")
+    config = require("friendlyIntervention.config")
 end)
